@@ -184,11 +184,12 @@ export const AiAssistant: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [streamingId, setStreamingId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([
     {
       id: nextId(),
       role: 'assistant',
-      content: "Hello! I'm **Ask Vasil AI**, Mohammed Abdul Vasil's official AI assistant. Ask me about his projects, skills, GATE 2027 prep, or why he'd be a great addition to your team!",
+      content: "Hello! I'm **Ask Vasil AI**, Mohammed Abdul Vasil's official AI assistant powered by Google Gemini. Ask me about his projects, skills, GATE 2027 preparation, or why he'd be an exceptional fit for your engineering team!",
     },
   ]);
 
@@ -225,7 +226,7 @@ export const AiAssistant: React.FC = () => {
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages, loading]);
+  }, [messages, loading, streamingId]);
 
   // Auto-resize textarea
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -237,7 +238,7 @@ export const AiAssistant: React.FC = () => {
 
   const handleSend = async (textToSend?: string) => {
     const query = (textToSend ?? input).trim();
-    if (!query || loading) return;
+    if (!query || loading || streamingId) return;
 
     const userMsg: Message = { id: nextId(), role: 'user', content: query };
     setMessages(prev => [...prev, userMsg]);
@@ -253,10 +254,15 @@ export const AiAssistant: React.FC = () => {
     const historyForServer = messages.slice(-10).map(m => ({ role: m.role, content: m.content }));
 
     abortControllerRef.current = new AbortController();
+    const assistantId = nextId();
+
     try {
-      const res = await fetch('/api/ai-chat', {
+      const res = await fetch('/api/ai-chat?stream=true', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'text/event-stream'
+        },
         body: JSON.stringify({ message: query, history: historyForServer }),
         signal: abortControllerRef.current.signal,
       });
@@ -266,13 +272,55 @@ export const AiAssistant: React.FC = () => {
         throw new Error(errData.error || `Server error ${res.status}`);
       }
 
-      const data = await res.json();
-      const assistantMsg: Message = {
-        id: nextId(),
-        role: 'assistant',
-        content: data.reply || "I couldn't generate a response at the moment. Please try again.",
-      };
-      setMessages(prev => [...prev, assistantMsg]);
+      const contentType = res.headers.get('content-type') || '';
+      if (contentType.includes('text/event-stream') && res.body) {
+        // Initialize streaming message
+        setMessages(prev => [...prev, { id: assistantId, role: 'assistant', content: '' }]);
+        setStreamingId(assistantId);
+        setLoading(false);
+
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let fullText = '';
+        let buffer = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed || !trimmed.startsWith('data: ')) continue;
+            const dataStr = trimmed.slice(6);
+            if (dataStr === '[DONE]') break;
+            try {
+              const parsed = JSON.parse(dataStr);
+              if (parsed.text) {
+                fullText += parsed.text;
+                setMessages(prev =>
+                  prev.map(m => m.id === assistantId ? { ...m, content: fullText } : m)
+                );
+              }
+            } catch {
+              // ignore chunk parsing glitch
+            }
+          }
+        }
+      } else {
+        const data = await res.json();
+        setMessages(prev => [
+          ...prev,
+          {
+            id: assistantId,
+            role: 'assistant',
+            content: data.reply || "I couldn't generate a response at the moment. Please try again."
+          }
+        ]);
+      }
     } catch (err: any) {
       if (err.name === 'AbortError') return; // User cancelled
       const isServerOrNetwork = !err.message || err.message.includes('fetch') || err.message.includes('NetworkError');
@@ -286,6 +334,7 @@ export const AiAssistant: React.FC = () => {
       setMessages(prev => [...prev, errorMsg]);
     } finally {
       setLoading(false);
+      setStreamingId(null);
       abortControllerRef.current = null;
     }
   };
@@ -293,6 +342,7 @@ export const AiAssistant: React.FC = () => {
   const handleStop = () => {
     abortControllerRef.current?.abort();
     setLoading(false);
+    setStreamingId(null);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -352,8 +402,14 @@ export const AiAssistant: React.FC = () => {
                   <Bot className="w-4 h-4" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold">Ask Vasil AI</h3>
-                  <p className="text-[10px] text-slate-400 font-medium">Official Portfolio Assistant</p>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-sm font-bold">Ask Vasil AI</h3>
+                    <span className="flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 text-[9px] font-mono font-medium border border-emerald-500/30">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                      Gemini 3.8 Flash
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-slate-400 font-medium">Real-Time Portfolio Intelligence</p>
                 </div>
               </div>
               <div className="flex items-center gap-1.5">
@@ -413,8 +469,11 @@ export const AiAssistant: React.FC = () => {
                         >
                           {msg.content}
                         </ReactMarkdown>
+                        {streamingId === msg.id && (
+                          <span className="inline-block w-1.5 h-3.5 ml-1 bg-orange-500 rounded-sm animate-pulse align-middle" />
+                        )}
                       </div>
-                      {msg.role === 'assistant' && (
+                      {msg.role === 'assistant' && !streamingId && (
                         <CopyResponseButton content={msg.content} />
                       )}
                     </div>
@@ -475,7 +534,7 @@ export const AiAssistant: React.FC = () => {
                 style={{ height: 'auto' }}
                 aria-label="Message input"
               />
-              {loading ? (
+              {(loading || streamingId) ? (
                 <motion.button
                   whileTap={{ scale: 0.9 }}
                   onClick={handleStop}
