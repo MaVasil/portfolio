@@ -1,0 +1,6 @@
+{
+  "name": "Vasil.dev — AI-Powered Engineering Portfolio & Personal Command Center",
+  "description": "Production-grade AI-powered personal engineering portfolio of Mohammed Abdul Vasil (CBIT Hyderabad), featuring the Ask Vasil AI Assistant, Consistency Lab GATE tracker, and Secure Admin Command Center.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
