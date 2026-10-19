@@ -1,6 +1,8 @@
 import React from 'react';
+import { motion } from 'framer-motion';
 import { portfolioData } from '../data/portfolioData';
 import { Lock } from 'lucide-react';
+import { fadeUp, VIEWPORT } from '../lib/motionVariants';
 
 interface FooterProps {
   onOpenAdmin: () => void;
@@ -8,7 +10,13 @@ interface FooterProps {
 
 export const Footer: React.FC<FooterProps> = ({ onOpenAdmin }) => {
   return (
-    <footer className="py-12 bg-white border-t border-slate-200">
+    <motion.footer
+      variants={fadeUp}
+      initial="hidden"
+      whileInView="visible"
+      viewport={VIEWPORT}
+      className="py-12 bg-white border-t border-slate-200"
+    >
       <div className="max-w-7xl mx-auto px-6 flex flex-col sm:flex-row items-center justify-between gap-6">
         <div className="flex items-center gap-3">
           <span className="w-7 h-7 rounded-lg bg-orange-600 text-white flex items-center justify-center font-bold text-xs">
@@ -18,13 +26,27 @@ export const Footer: React.FC<FooterProps> = ({ onOpenAdmin }) => {
         </div>
 
         <p className="text-xs text-slate-500">
-          © {new Date().getFullYear()} Mohammed Abdul Vasil. Built with React, Vite, & Three.js.
+          © {new Date().getFullYear()} Mohammed Abdul Vasil. Built with React, Vite, &amp; Three.js.
         </p>
 
         <div className="flex items-center gap-6 text-xs font-medium text-slate-600">
-          <a href="#projects" className="hover:text-slate-900 transition-colors">Projects</a>
-          <a href="#consistency-lab" className="hover:text-slate-900 transition-colors">GATE 2027</a>
-          <a href="#capabilities" className="hover:text-slate-900 transition-colors">Capabilities</a>
+          {[
+            { href: '#projects', label: 'Projects' },
+            { href: '#consistency-lab', label: 'GATE 2027' },
+            { href: '#capabilities', label: 'Capabilities' },
+          ].map(({ href, label }) => (
+            <a
+              key={href}
+              href={href}
+              onClick={e => {
+                e.preventDefault();
+                document.getElementById(href.replace('#', ''))?.scrollIntoView({ behavior: 'smooth' });
+              }}
+              className="hover:text-slate-900 transition-colors"
+            >
+              {label}
+            </a>
+          ))}
           <button
             onClick={onOpenAdmin}
             className="flex items-center gap-1.5 text-orange-600 hover:text-orange-700 font-semibold transition-colors"
@@ -34,6 +56,6 @@ export const Footer: React.FC<FooterProps> = ({ onOpenAdmin }) => {
           </button>
         </div>
       </div>
-    </footer>
+    </motion.footer>
   );
 };

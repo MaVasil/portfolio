@@ -67,6 +67,7 @@ export const portfolioData = {
       longDescription: "Engineered during the Smart India Hackathon (SIH), TrainETA addresses the complex challenge of railway scheduling delays by building an automated prediction engine. The system ingests live positional pings and correlates them against multi-year historical delay patterns across weather, track congestion, and maintenance schedules.",
       metrics: "Top 20 of 200 Teams · Smart India Hackathon",
       techStack: ["Python", "FastAPI", "Supabase", "Scikit-Learn", "PostgreSQL", "REST APIs"],
+      liveUrl: "https://traineta-nine.vercel.app/",
       featured: true,
       badge: "SIH Top 20",
       architecture: [
@@ -85,6 +86,7 @@ export const portfolioData = {
       longDescription: "Designed for modern warehouse and retail operations, this full-stack application provides granular control over stock inventories, supplier management, and transactional auditing with zero race conditions.",
       metrics: "99.9% Query Efficiency · Real-Time Sync",
       techStack: ["React.js", "Node.js", "Express.js", "MongoDB", "Tailwind CSS", "JWT Auth"],
+      liveUrl: "https://inventory-tracking-management.vercel.app/home?redirect=/dashboard",
       featured: true,
       badge: "Full-Stack",
       architecture: [
@@ -103,6 +105,7 @@ export const portfolioData = {
       longDescription: "A collaborative digital workspace designed to unify student technical activities. Features structured event registration forms, dynamic markdown announcement feeds, and an administrative oversight dashboard.",
       metrics: "Used by 500+ CBIT Students",
       techStack: ["React.js", "JavaScript", "Tailwind CSS", "Vite", "Firebase Auth"],
+      liveUrl: "https://team-project-vmedha-sudhee.vercel.app/",
       featured: true,
       badge: "Campus Impact",
       architecture: [

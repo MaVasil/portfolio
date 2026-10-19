@@ -1,0 +1,33 @@
+name: CI & Deployment Gate
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  validate-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Typecheck and Lint
+        run: npm run lint
+
+      - name: Run Unit Tests
+        run: npx tsx --test tests/unit.test.ts
+
+      - name: Production Bundle Build
+        run: npm run build

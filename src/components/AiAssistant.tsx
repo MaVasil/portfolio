@@ -1,231 +1,506 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { MessageSquare, X, Send, Sparkles, Bot, User, Trash2 } from 'lucide-react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { MessageSquare, X, Send, Sparkles, Bot, User, Trash2, Copy, Check, Square } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import type { Components } from 'react-markdown';
 
 interface Message {
+  id: string;
   role: 'user' | 'assistant';
   content: string;
 }
 
+// ─── Unique ID helper ───────────────────────────────────────────────────────
+let _msgId = 0;
+const nextId = () => `m${++_msgId}`;
+
+// ─── Copy-code button component ──────────────────────────────────────────────
+const CopyCodeButton: React.FC<{ code: string }> = ({ code }) => {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // ignore clipboard errors silently
+    }
+  };
+
+  return (
+    <button
+      onClick={handleCopy}
+      className="flex items-center gap-1 text-[10px] font-medium text-slate-400 hover:text-white px-2 py-0.5 rounded transition-colors"
+      aria-label="Copy code"
+      title="Copy code"
+    >
+      {copied ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+      <span>{copied ? 'Copied' : 'Copy'}</span>
+    </button>
+  );
+};
+
+// ─── Markdown components ─────────────────────────────────────────────────────
+const buildMarkdownComponents = (isUser: boolean): Components => ({
+  // Headings
+  h1: ({ children }) => <h1 className="text-sm font-bold mt-3 mb-1">{children}</h1>,
+  h2: ({ children }) => <h2 className="text-[0.8125rem] font-bold mt-3 mb-1">{children}</h2>,
+  h3: ({ children }) => <h3 className="text-xs font-bold mt-2 mb-0.5">{children}</h3>,
+
+  // Paragraph
+  p: ({ children }) => <p className="my-1 leading-relaxed">{children}</p>,
+
+  // Lists
+  ul: ({ children }) => <ul className="list-none pl-0 my-1 space-y-0.5">{children}</ul>,
+  ol: ({ children }) => <ol className="list-decimal pl-4 my-1 space-y-0.5">{children}</ol>,
+  li: ({ children }) => (
+    <li className="flex items-start gap-1.5">
+      <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-orange-400 shrink-0" />
+      <span className="flex-1">{children}</span>
+    </li>
+  ),
+
+  // Inline code
+  code({ node, className, children, ...rest }) {
+    // Detect block vs inline code by checking for a language className
+    const isBlock = !!(className && className.startsWith('language-'));
+    const codeString = String(children).replace(/\n$/, '');
+
+    if (isBlock) {
+      const lang = className?.replace('language-', '') || '';
+      return (
+        <div className="relative rounded-lg overflow-hidden my-2 bg-slate-900 border border-white/10">
+          {/* Code block header */}
+          <div className="flex items-center justify-between px-3 py-1.5 bg-slate-800/80 border-b border-white/10">
+            <span className="text-[10px] font-mono text-slate-400">{lang || 'code'}</span>
+            <CopyCodeButton code={codeString} />
+          </div>
+          <pre className="overflow-x-auto p-3 m-0">
+            <code className="text-[0.7rem] font-mono leading-relaxed text-slate-200">{codeString}</code>
+          </pre>
+        </div>
+      );
+    }
+
+    return (
+      <code
+        className={`font-mono text-[0.75em] px-1.5 py-0.5 rounded ${
+          isUser
+            ? 'bg-white/20 text-white border border-white/30'
+            : 'bg-slate-100 text-rose-600 border border-slate-200'
+        }`}
+        {...rest}
+      >
+        {children}
+      </code>
+    );
+  },
+
+  // Pre – handled by code, this avoids double-wrapping
+  pre: ({ children }) => <>{children}</>,
+
+  // Links
+  a: ({ href, children }) => (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer nofollow"
+      className={`underline underline-offset-2 decoration-1 ${isUser ? 'text-orange-200' : 'text-orange-600 hover:text-orange-700'}`}
+    >
+      {children}
+    </a>
+  ),
+
+  // Blockquote
+  blockquote: ({ children }) => (
+    <blockquote className={`border-l-2 pl-3 my-2 italic ${isUser ? 'border-orange-300/60 text-orange-100' : 'border-orange-400 text-slate-500'}`}>
+      {children}
+    </blockquote>
+  ),
+
+  // Table
+  table: ({ children }) => (
+    <div className="overflow-x-auto my-2 rounded-lg border border-slate-200">
+      <table className="text-xs w-full border-collapse">{children}</table>
+    </div>
+  ),
+  th: ({ children }) => <th className="bg-slate-100 font-semibold text-slate-700 p-2 text-left border-b border-slate-200">{children}</th>,
+  td: ({ children }) => <td className="p-2 border-b border-slate-100 last:border-0 align-top">{children}</td>,
+
+  // HR
+  hr: () => <hr className="my-3 border-slate-200" />,
+
+  // Strong / em
+  strong: ({ children }) => <strong className={`font-bold ${isUser ? 'text-white' : 'text-slate-900'}`}>{children}</strong>,
+  em: ({ children }) => <em className="italic opacity-90">{children}</em>,
+});
+
+// ─── Typing indicator ─────────────────────────────────────────────────────────
+const TypingIndicator: React.FC = () => (
+  <div className="flex gap-3 justify-start">
+    <div className="w-7 h-7 rounded-lg bg-orange-600 text-white flex items-center justify-center shrink-0 mt-1 shadow-sm">
+      <Bot className="w-3.5 h-3.5" />
+    </div>
+    <div className="glass-card rounded-2xl rounded-bl-sm px-4 py-3 border border-slate-200/80 shadow-sm">
+      <div className="flex items-center gap-1.5 h-5">
+        <span className="typing-dot w-1.5 h-1.5 rounded-full bg-slate-400" />
+        <span className="typing-dot w-1.5 h-1.5 rounded-full bg-slate-400" />
+        <span className="typing-dot w-1.5 h-1.5 rounded-full bg-slate-400" />
+      </div>
+    </div>
+  </div>
+);
+
+// ─── Copy response button ─────────────────────────────────────────────────────
+const CopyResponseButton: React.FC<{ content: string }> = ({ content }) => {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(content);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // ignore
+    }
+  };
+
+  return (
+    <button
+      onClick={handleCopy}
+      className="opacity-0 group-hover:opacity-100 transition-opacity ml-1 p-1 rounded text-slate-300 hover:text-slate-500"
+      aria-label="Copy response"
+      title="Copy response"
+    >
+      {copied ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
+    </button>
+  );
+};
+
+// ─── Main component ───────────────────────────────────────────────────────────
 export const AiAssistant: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [messages, setMessages] = useState<Message[]>([
     {
+      id: nextId(),
       role: 'assistant',
-      content: "Hello! I'm **Ask Vasil AI**, Mohammed Abdul Vasil's official AI recruiter assistant. Ask me anything about his projects, GATE CSE+DA prep, CBIT academics, or why he'd be a great addition to your engineering team!"
-    }
+      content: "Hello! I'm **Ask Vasil AI**, Mohammed Abdul Vasil's official AI assistant. Ask me about his projects, skills, GATE 2027 prep, or why he'd be a great addition to your team!",
+    },
   ]);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const [isNearBottom, setIsNearBottom] = useState(true);
 
   const suggestedQuestions = [
-    "Tell me about Vasil",
-    "What is TrainETA architecture?",
-    "What is his GATE 2027 goal?",
-    "What are his strongest skills?"
+    'Tell me about Vasil',
+    'TrainETA architecture?',
+    'GATE 2027 goal',
+    'Strongest skills',
   ];
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
+  // Track whether user is near the bottom to decide auto-scroll
+  const handleScroll = useCallback(() => {
+    const container = messagesContainerRef.current;
+    if (!container) return;
+    const { scrollTop, scrollHeight, clientHeight } = container;
+    setIsNearBottom(scrollHeight - scrollTop - clientHeight < 80);
+  }, []);
+
+  const scrollToBottom = useCallback((force = false) => {
+    if (force || isNearBottom) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [isNearBottom]);
 
   useEffect(() => {
-    if (isOpen) {
-      scrollToBottom();
-    }
-  }, [isOpen, messages]);
+    if (isOpen) scrollToBottom(true);
+  }, [isOpen]);
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages, loading]);
+
+  // Auto-resize textarea
+  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setInput(e.target.value);
+    const el = e.target;
+    el.style.height = 'auto';
+    el.style.height = `${Math.min(el.scrollHeight, 120)}px`;
+  };
 
   const handleSend = async (textToSend?: string) => {
-    const query = textToSend || input;
-    if (!query.trim()) return;
+    const query = (textToSend ?? input).trim();
+    if (!query || loading) return;
 
-    const userMessage: Message = { role: 'user', content: query };
-    setMessages(prev => [...prev, userMessage]);
-    if (!textToSend) setInput('');
+    const userMsg: Message = { id: nextId(), role: 'user', content: query };
+    setMessages(prev => [...prev, userMsg]);
+    if (!textToSend) {
+      setInput('');
+      if (textareaRef.current) {
+        textareaRef.current.style.height = 'auto';
+      }
+    }
     setLoading(true);
 
+    // Keep only the last 10 messages as history to avoid token bloat
+    const historyForServer = messages.slice(-10).map(m => ({ role: m.role, content: m.content }));
+
+    abortControllerRef.current = new AbortController();
     try {
       const res = await fetch('/api/ai-chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: query, history: messages })
+        body: JSON.stringify({ message: query, history: historyForServer }),
+        signal: abortControllerRef.current.signal,
       });
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || `Server error ${res.status}`);
+      }
+
       const data = await res.json();
-      
-      const assistantMessage: Message = {
+      const assistantMsg: Message = {
+        id: nextId(),
         role: 'assistant',
-        content: data.reply || "I apologize, but I couldn't process that request right now."
+        content: data.reply || "I couldn't generate a response at the moment. Please try again.",
       };
-      setMessages(prev => [...prev, assistantMessage]);
-    } catch (err) {
-      setMessages(prev => [
-        ...prev,
-        { role: 'assistant', content: "Network error connecting to AI assistant service. Please reach Vasil directly at mdvasil07@gmail.com." }
-      ]);
+      setMessages(prev => [...prev, assistantMsg]);
+    } catch (err: any) {
+      if (err.name === 'AbortError') return; // User cancelled
+      const isServerOrNetwork = !err.message || err.message.includes('fetch') || err.message.includes('NetworkError');
+      const errorMsg: Message = {
+        id: nextId(),
+        role: 'assistant',
+        content: isServerOrNetwork
+          ? `⚠️ **Unable to reach the assistant.** Please check your connection or contact Vasil directly at [mdvasil07@gmail.com](mailto:mdvasil07@gmail.com).`
+          : `⚠️ ${err.message}\n\nYou can reach Vasil directly at [mdvasil07@gmail.com](mailto:mdvasil07@gmail.com).`,
+      };
+      setMessages(prev => [...prev, errorMsg]);
     } finally {
       setLoading(false);
+      abortControllerRef.current = null;
     }
   };
 
-  // Helper to render basic markdown formatting (bold, bullet lines, paragraphs)
-  const renderFormattedMessage = (text: string) => {
-    return text.split('\n').map((line, idx) => {
-      // Check for bullet points
-      const isBullet = line.trim().startsWith('-') || line.trim().startsWith('•');
-      const cleanLine = isBullet ? line.trim().replace(/^[-•]\s*/, '') : line;
+  const handleStop = () => {
+    abortControllerRef.current?.abort();
+    setLoading(false);
+  };
 
-      // Format bold asterisks
-      const parts = cleanLine.split(/(\*\*.*?\*\*)/g);
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
+    }
+  };
 
-      const formattedContent = parts.map((part, pIdx) => {
-        if (part.startsWith('**') && part.endsWith('**')) {
-          return <strong key={pIdx} className="font-bold text-slate-900">{part.slice(2, -2)}</strong>;
-        }
-        return part;
-      });
-
-      if (isBullet) {
-        return (
-          <div key={idx} className="flex items-start gap-2 my-1 pl-2">
-            <span className="w-1.5 h-1.5 rounded-full bg-orange-500 shrink-0 mt-2" />
-            <span>{formattedContent}</span>
-          </div>
-        );
-      }
-
-      return (
-        <p key={idx} className={`${idx > 0 ? 'mt-2' : ''} leading-relaxed`}>
-          {formattedContent}
-        </p>
-      );
-    });
+  const handleClearChat = () => {
+    setMessages([{
+      id: nextId(),
+      role: 'assistant',
+      content: 'Conversation cleared. How else can I help you learn about Vasil\'s engineering background?',
+    }]);
   };
 
   return (
     <div className="fixed bottom-6 right-6 z-50">
-      {/* Floating Toggle Button */}
-      {!isOpen && (
-        <button
-          onClick={() => setIsOpen(true)}
-          className="group relative flex items-center gap-2.5 bg-slate-900 hover:bg-orange-600 text-white px-5 py-3.5 rounded-2xl shadow-2xl transition-all duration-300 hover:scale-105 border border-white/20"
-          aria-label="Open Ask Vasil AI Assistant"
-        >
-          <div className="w-6 h-6 rounded-lg bg-orange-500 text-white flex items-center justify-center font-bold text-xs shadow-md">
-            <Sparkles className="w-3.5 h-3.5" />
-          </div>
-          <span className="text-sm font-semibold tracking-tight">Ask Vasil AI</span>
-          <span className="absolute -top-1 -right-1 w-3 h-3 bg-orange-500 rounded-full animate-ping" />
-        </button>
-      )}
-
-      {/* Chat Window */}
-      {isOpen && (
-        <div className="glass-card w-[92vw] sm:w-[420px] h-[580px] rounded-3xl shadow-2xl flex flex-col border border-white/80 bg-white/95 overflow-hidden animate-in fade-in slide-in-from-bottom-5 duration-300">
-          
-          {/* Header */}
-          <div className="bg-slate-900 text-white px-5 py-4 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-xl bg-orange-600 flex items-center justify-center text-white font-bold">
-                <Bot className="w-4 h-4" />
-              </div>
-              <div>
-                <h3 className="text-sm font-bold">Ask Vasil AI</h3>
-                <p className="text-[10px] text-slate-400 font-medium">Official Recruiter Assistant</p>
-              </div>
+      {/* Floating toggle button */}
+      <AnimatePresence>
+        {!isOpen && (
+          <motion.button
+            initial={{ scale: 0.8, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0.8, opacity: 0 }}
+            whileHover={{ scale: 1.06 }}
+            whileTap={{ scale: 0.94 }}
+            transition={{ type: 'spring', stiffness: 380, damping: 22 }}
+            onClick={() => setIsOpen(true)}
+            className="group relative flex items-center gap-2.5 bg-slate-900 hover:bg-orange-600 text-white px-5 py-3.5 rounded-2xl shadow-2xl border border-white/20 transition-colors duration-200"
+            aria-label="Open Ask Vasil AI Assistant"
+          >
+            <div className="w-6 h-6 rounded-lg bg-orange-500 group-hover:bg-white/20 text-white flex items-center justify-center font-bold text-xs shadow-md transition-colors">
+              <Sparkles className="w-3.5 h-3.5" />
             </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setMessages([{ role: 'assistant', content: "Conversation cleared. How else can I help you learn about Vasil's engineering background?" }])}
-                className="p-1.5 text-slate-400 hover:text-white rounded-lg transition-colors"
-                title="Clear chat"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
-              <button
-                onClick={() => setIsOpen(false)}
-                className="p-1.5 text-slate-400 hover:text-white rounded-lg transition-colors"
-                title="Close"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-          </div>
+            <span className="text-sm font-semibold tracking-tight">Ask Vasil AI</span>
+            <span className="absolute -top-1 -right-1 w-3 h-3 bg-orange-500 rounded-full animate-ping" />
+          </motion.button>
+        )}
+      </AnimatePresence>
 
-          {/* Messages Area */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50/60">
-            {messages.map((msg, idx) => (
-              <div
-                key={idx}
-                className={`flex gap-3 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
-              >
-                {msg.role === 'assistant' && (
-                  <div className="w-7 h-7 rounded-lg bg-orange-600 text-white flex items-center justify-center shrink-0 mt-1 shadow-sm">
-                    <Bot className="w-3.5 h-3.5" />
-                  </div>
-                )}
-                <div
-                  className={`max-w-[82%] rounded-2xl px-4 py-3 text-xs sm:text-sm leading-relaxed shadow-sm ${
-                    msg.role === 'user'
-                      ? 'bg-orange-600 text-white rounded-br-xs'
-                      : 'bg-white text-slate-800 border border-slate-200/80 rounded-bl-xs'
-                  }`}
+      {/* Chat window */}
+      <AnimatePresence>
+        {isOpen && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95, y: 16 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: 16 }}
+            transition={{ type: 'spring', stiffness: 350, damping: 28 }}
+            className="glass-card w-[92vw] sm:w-[430px] h-[600px] rounded-3xl shadow-2xl flex flex-col border border-white/80 bg-white/97 overflow-hidden"
+          >
+            {/* Header */}
+            <div className="bg-slate-900 text-white px-5 py-4 flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-xl bg-orange-600 flex items-center justify-center text-white font-bold">
+                  <Bot className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold">Ask Vasil AI</h3>
+                  <p className="text-[10px] text-slate-400 font-medium">Official Portfolio Assistant</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <motion.button
+                  whileTap={{ scale: 0.9 }}
+                  onClick={handleClearChat}
+                  className="p-1.5 text-slate-400 hover:text-white rounded-lg transition-colors"
+                  title="Clear chat"
+                  aria-label="Clear conversation"
                 >
-                  {renderFormattedMessage(msg.content)}
-                </div>
-                {msg.role === 'user' && (
-                  <div className="w-7 h-7 rounded-lg bg-slate-900 text-white flex items-center justify-center shrink-0 mt-1 shadow-sm">
-                    <User className="w-3.5 h-3.5" />
-                  </div>
-                )}
+                  <Trash2 className="w-4 h-4" />
+                </motion.button>
+                <motion.button
+                  whileTap={{ scale: 0.9 }}
+                  onClick={() => setIsOpen(false)}
+                  className="p-1.5 text-slate-400 hover:text-white rounded-lg transition-colors"
+                  title="Close"
+                  aria-label="Close chat"
+                >
+                  <X className="w-5 h-5" />
+                </motion.button>
               </div>
-            ))}
-            {loading && (
-              <div className="flex gap-3 items-center text-slate-500 text-xs italic bg-white/80 p-3 rounded-2xl w-fit border border-slate-200 shadow-xs">
-                <div className="w-5 h-5 rounded-lg bg-orange-600 text-white flex items-center justify-center animate-spin">
-                  <Sparkles className="w-3 h-3" />
-                </div>
-                <span>Analyzing knowledge base & formatting response...</span>
-              </div>
-            )}
-            <div ref={messagesEndRef} />
-          </div>
+            </div>
 
-          {/* Suggested Chips */}
-          <div className="px-4 py-2 bg-white border-t border-slate-100 flex gap-1.5 overflow-x-auto no-scrollbar">
-            {suggestedQuestions.map((q, idx) => (
-              <button
-                key={idx}
-                onClick={() => handleSend(q)}
-                className="text-[11px] bg-slate-100 hover:bg-orange-50 hover:text-orange-600 text-slate-700 px-3 py-1.5 rounded-full border border-slate-200 whitespace-nowrap transition-colors"
-              >
-                {q}
-              </button>
-            ))}
-          </div>
-
-          {/* Input Footer */}
-          <div className="p-3 bg-white border-t border-slate-200 flex items-center gap-2">
-            <input
-              type="text"
-              placeholder="Ask about projects, CGPA, GATE..."
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-              className="flex-1 px-4 py-2.5 text-xs sm:text-sm bg-slate-100 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500/30"
-            />
-            <button
-              onClick={() => handleSend()}
-              disabled={loading || !input.trim()}
-              className="p-2.5 bg-orange-600 hover:bg-orange-700 disabled:opacity-50 text-white rounded-xl transition-all shadow-md"
-              aria-label="Send message"
+            {/* Messages area */}
+            <div
+              ref={messagesContainerRef}
+              onScroll={handleScroll}
+              className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50/60"
             >
-              <Send className="w-4 h-4" />
-            </button>
-          </div>
+              <AnimatePresence initial={false}>
+                {messages.map(msg => (
+                  <motion.div
+                    key={msg.id}
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.25, ease: 'easeOut' }}
+                    className={`flex gap-3 ${msg.role === 'user' ? 'justify-end' : 'justify-start'} group`}
+                  >
+                    {msg.role === 'assistant' && (
+                      <div className="w-7 h-7 rounded-lg bg-orange-600 text-white flex items-center justify-center shrink-0 mt-1 shadow-sm">
+                        <Bot className="w-3.5 h-3.5" />
+                      </div>
+                    )}
 
-        </div>
-      )}
+                    <div
+                      className={`relative max-w-[85%] rounded-2xl px-4 py-3 shadow-sm ${
+                        msg.role === 'user'
+                          ? 'bg-orange-600 text-white rounded-br-sm'
+                          : 'bg-white text-slate-800 border border-slate-200/80 rounded-bl-sm'
+                      }`}
+                    >
+                      <div className={`prose-chat ${msg.role === 'user' ? 'prose-chat-user' : ''}`}>
+                        <ReactMarkdown
+                          remarkPlugins={[remarkGfm]}
+                          components={buildMarkdownComponents(msg.role === 'user')}
+                        >
+                          {msg.content}
+                        </ReactMarkdown>
+                      </div>
+                      {msg.role === 'assistant' && (
+                        <CopyResponseButton content={msg.content} />
+                      )}
+                    </div>
+
+                    {msg.role === 'user' && (
+                      <div className="w-7 h-7 rounded-lg bg-slate-900 text-white flex items-center justify-center shrink-0 mt-1 shadow-sm">
+                        <User className="w-3.5 h-3.5" />
+                      </div>
+                    )}
+                  </motion.div>
+                ))}
+              </AnimatePresence>
+
+              {/* Typing indicator */}
+              <AnimatePresence>
+                {loading && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 8 }}
+                    transition={{ duration: 0.2 }}
+                  >
+                    <TypingIndicator />
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              <div ref={messagesEndRef} />
+            </div>
+
+            {/* Suggested chips */}
+            <div className="px-4 py-2 bg-white border-t border-slate-100 flex gap-1.5 overflow-x-auto no-scrollbar shrink-0">
+              {suggestedQuestions.map((q, idx) => (
+                <motion.button
+                  key={idx}
+                  whileHover={{ scale: 1.04 }}
+                  whileTap={{ scale: 0.96 }}
+                  onClick={() => !loading && handleSend(q)}
+                  disabled={loading}
+                  className="text-[11px] bg-slate-100 hover:bg-orange-50 hover:text-orange-600 text-slate-700 px-3 py-1.5 rounded-full border border-slate-200 whitespace-nowrap transition-colors disabled:opacity-50"
+                >
+                  {q}
+                </motion.button>
+              ))}
+            </div>
+
+            {/* Input area */}
+            <div className="p-3 bg-white border-t border-slate-200 flex items-end gap-2 shrink-0">
+              <textarea
+                ref={textareaRef}
+                rows={1}
+                placeholder="Ask about projects, CGPA, skills… (Enter to send, Shift+Enter for newline)"
+                value={input}
+                onChange={handleInputChange}
+                onKeyDown={handleKeyDown}
+                disabled={loading}
+                className="flex-1 px-4 py-2.5 text-xs sm:text-sm bg-slate-100 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500/30 resize-none overflow-hidden min-h-[40px] max-h-[120px] leading-relaxed transition-shadow disabled:opacity-60"
+                style={{ height: 'auto' }}
+                aria-label="Message input"
+              />
+              {loading ? (
+                <motion.button
+                  whileTap={{ scale: 0.9 }}
+                  onClick={handleStop}
+                  className="p-2.5 bg-slate-200 hover:bg-red-100 text-slate-600 hover:text-red-600 rounded-xl transition-all shadow-sm"
+                  aria-label="Stop generation"
+                  title="Stop"
+                >
+                  <Square className="w-4 h-4" />
+                </motion.button>
+              ) : (
+                <motion.button
+                  whileTap={{ scale: 0.9 }}
+                  onClick={() => handleSend()}
+                  disabled={!input.trim()}
+                  className="p-2.5 bg-orange-600 hover:bg-orange-700 disabled:opacity-40 text-white rounded-xl transition-all shadow-md"
+                  aria-label="Send message"
+                >
+                  <Send className="w-4 h-4" />
+                </motion.button>
+              )}
+            </div>
+
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Target, Clock, BookOpen, Flame, Award, CheckCircle2, TrendingUp, Calendar, Layers } from 'lucide-react';
+import { Target, Clock, Flame, CheckCircle2, Code2, Sparkles, BookOpen } from 'lucide-react';
+import { fetchGateSubjects, fetchOverallDsa, GateSubjectItem, OverallDsaData } from '../lib/portfolioService';
 
 export const ConsistencyLab: React.FC = () => {
   // GATE 2027 target date: Feb 6, 2027 09:00:00 IST (+05:30)
@@ -12,6 +13,11 @@ export const ConsistencyLab: React.FC = () => {
     minutes: 0,
     seconds: 0
   });
+
+  const [gateCsSubjects, setGateCsSubjects] = useState<GateSubjectItem[]>([]);
+  const [gateDaSubjects, setGateDaSubjects] = useState<GateSubjectItem[]>([]);
+  const [overallDsa, setOverallDsa] = useState<OverallDsaData | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const updateCountdown = () => {
@@ -33,30 +39,22 @@ export const ConsistencyLab: React.FC = () => {
     return () => clearInterval(interval);
   }, [targetDate]);
 
-  // GATE CS Subjects (100% syllabus completion)
-  const gateCsSubjects = [
-    { name: "Engineering Mathematics", completion: 100, revision: "Cycle 2 Completed", pyqs: "450+ Solved" },
-    { name: "Digital Logic", completion: 100, revision: "Cycle 2 Completed", pyqs: "320+ Solved" },
-    { name: "Computer Organization & Architecture", completion: 100, revision: "Cycle 2 Completed", pyqs: "380+ Solved" },
-    { name: "Programming and Data Structures", completion: 100, revision: "Cycle 3 Completed", pyqs: "500+ Solved" },
-    { name: "Algorithms", completion: 100, revision: "Cycle 3 Completed", pyqs: "550+ Solved" },
-    { name: "Theory of Computation", completion: 100, revision: "Cycle 2 Completed", pyqs: "400+ Solved" },
-    { name: "Compiler Design", completion: 100, revision: "Cycle 2 Completed", pyqs: "300+ Solved" },
-    { name: "Operating Systems", completion: 100, revision: "Cycle 3 Completed", pyqs: "480+ Solved" },
-    { name: "Databases", completion: 100, revision: "Cycle 3 Completed", pyqs: "450+ Solved" },
-    { name: "Computer Networks", completion: 100, revision: "Cycle 2 Completed", pyqs: "420+ Solved" }
-  ];
+  useEffect(() => {
+    let isMounted = true;
+    Promise.all([fetchGateSubjects(), fetchOverallDsa()])
+      .then(([gateRes, dsaRes]) => {
+        if (!isMounted) return;
+        setGateCsSubjects(gateRes.cs);
+        setGateDaSubjects(gateRes.da);
+        setOverallDsa(dsaRes);
+      })
+      .catch((err) => console.error('Error fetching Consistency Lab data:', err))
+      .finally(() => {
+        if (isMounted) setLoading(false);
+      });
 
-  // GATE DA Subjects (100% syllabus completion)
-  const gateDaSubjects = [
-    { name: "Probability and Statistics", completion: 100, revision: "Cycle 2 Completed", pyqs: "400+ Solved" },
-    { name: "Linear Algebra", completion: 100, revision: "Cycle 2 Completed", pyqs: "350+ Solved" },
-    { name: "Calculus and Optimization", completion: 100, revision: "Cycle 2 Completed", pyqs: "300+ Solved" },
-    { name: "Programming, Data Structures & Algorithms", completion: 100, revision: "Cycle 3 Completed", pyqs: "500+ Solved" },
-    { name: "Database Management & Warehousing", completion: 100, revision: "Cycle 2 Completed", pyqs: "320+ Solved" },
-    { name: "Machine Learning", completion: 100, revision: "Cycle 3 Completed", pyqs: "600+ Solved" },
-    { name: "Artificial Intelligence", completion: 100, revision: "Cycle 3 Completed", pyqs: "450+ Solved" }
-  ];
+    return () => { isMounted = false; };
+  }, []);
 
   return (
     <section id="consistency-lab" className="py-24 relative">
@@ -78,9 +76,78 @@ export const ConsistencyLab: React.FC = () => {
             GATE 2027 CSE & DA Preparation Dashboard
           </h2>
           <p className="text-sm text-slate-600">
-            Full syllabus coverage completed for both GATE CS and GATE DA. Current active phase focuses on advanced revision cycles, PYQs, and mock tests.
+            Real-time, database-backed progress tracking for GATE 2027 examination tracks and overall algorithmic problem-solving rigor.
           </p>
         </motion.div>
+
+        {/* Dynamic Overall DSA Numerical Progress Card */}
+        {overallDsa && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="glass-card rounded-3xl p-8 border border-slate-200/80 shadow-xl mb-12 bg-white/95"
+          >
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-6 border-b border-slate-200">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-2xl bg-orange-50 border border-orange-200 text-orange-600 flex items-center justify-center font-bold">
+                  <Code2 className="w-6 h-6" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-semibold text-orange-600 uppercase tracking-wider">Algorithmic Problem Solving</span>
+                    <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                      Database Verified
+                    </span>
+                  </div>
+                  <h3 className="text-2xl font-black text-slate-900">Overall DSA Progress Tracker</h3>
+                </div>
+              </div>
+              <div className="text-right">
+                <span className="text-3xl font-black text-orange-600 font-mono">
+                  {overallDsa.solved} <span className="text-sm text-slate-400 font-normal">/ {overallDsa.target}</span>
+                </span>
+                <span className="block text-xs text-slate-500 font-medium">Questions Solved ({overallDsa.percentage}% Target)</span>
+              </div>
+            </div>
+
+            {/* Progress Bar */}
+            <div className="mt-6 mb-6">
+              <div className="flex justify-between text-xs text-slate-500 mb-2 font-medium">
+                <span>Progress: {overallDsa.solved} Questions Solved</span>
+                <span>Remaining: {overallDsa.remaining} Questions</span>
+              </div>
+              <div className="w-full bg-slate-100 h-3 rounded-full overflow-hidden">
+                <div
+                  className="bg-gradient-to-r from-orange-500 to-amber-500 h-full rounded-full transition-all duration-500"
+                  style={{ width: `${Math.min(100, overallDsa.percentage)}%` }}
+                />
+              </div>
+            </div>
+
+            {/* Breakdown Grid */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-4 border-t border-slate-100 text-center text-xs">
+              <div className="bg-slate-50 p-3 rounded-xl border border-slate-200/60">
+                <span className="text-slate-400 block mb-1">Target Questions</span>
+                <span className="font-mono font-bold text-slate-900 text-sm">{overallDsa.target}</span>
+              </div>
+              <div className="bg-slate-50 p-3 rounded-xl border border-slate-200/60">
+                <span className="text-slate-400 block mb-1">Solved Total</span>
+                <span className="font-mono font-bold text-orange-600 text-sm">{overallDsa.solved}</span>
+              </div>
+              <div className="bg-slate-50 p-3 rounded-xl border border-slate-200/60">
+                <span className="text-slate-400 block mb-1">Difficulty Breakdown</span>
+                <span className="font-mono font-semibold text-slate-700 text-xs">
+                  {overallDsa.easy}E · {overallDsa.medium}M · {overallDsa.hard}H
+                </span>
+              </div>
+              <div className="bg-slate-50 p-3 rounded-xl border border-slate-200/60">
+                <span className="text-slate-400 block mb-1">Platform</span>
+                <span className="font-mono font-bold text-slate-900 text-xs">{overallDsa.platform}</span>
+              </div>
+            </div>
+          </motion.div>
+        )}
 
         {/* High-Contrast Premium Black Countdown Panel */}
         <motion.div
@@ -134,25 +201,34 @@ export const ConsistencyLab: React.FC = () => {
               <div className="flex items-center justify-between mb-6 pb-4 border-b border-slate-200">
                 <div>
                   <span className="text-xs font-semibold text-orange-600 uppercase tracking-wider">Examination Track 01</span>
-                  <h3 className="text-xl font-black text-slate-900">GATE CS — Syllabus Complete: 100%</h3>
+                  <h3 className="text-xl font-black text-slate-900">GATE CS — Track Progress</h3>
                 </div>
-                <div className="w-12 h-12 rounded-2xl bg-orange-50 border border-orange-200 text-orange-600 flex items-center justify-center font-bold text-sm">
-                  100%
+                <div className="w-12 h-12 rounded-2xl bg-orange-50 border border-orange-200 text-orange-600 flex items-center justify-center font-bold text-xs font-mono">
+                  {gateCsSubjects.length > 0
+                    ? `${Math.round(gateCsSubjects.reduce((acc, s) => acc + s.completionPercentage, 0) / gateCsSubjects.length)}%`
+                    : '100%'}
                 </div>
               </div>
 
               <div className="space-y-4 mb-8">
-                {gateCsSubjects.map((subject, idx) => (
-                  <div key={idx} className="bg-slate-50 p-4 rounded-2xl border border-slate-200/60 flex items-center justify-between gap-4">
+                {gateCsSubjects.map((subject) => (
+                  <div key={subject.id} className="bg-slate-50 p-4 rounded-2xl border border-slate-200/60 flex items-center justify-between gap-4">
                     <div className="flex items-center gap-3">
                       <div className="w-6 h-6 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0">
                         <CheckCircle2 className="w-4 h-4" />
                       </div>
-                      <span className="text-xs sm:text-sm font-bold text-slate-900">{subject.name}</span>
+                      <div>
+                        <span className="text-xs sm:text-sm font-bold text-slate-900 block">{subject.name}</span>
+                        <span className="text-[10px] text-slate-400 font-mono">
+                          Target: {subject.targetPyqs} · Remaining: {subject.remainingPyqs}
+                        </span>
+                      </div>
                     </div>
                     <div className="flex items-center gap-3 shrink-0 text-xs">
-                      <span className="text-slate-500 font-medium hidden sm:inline">{subject.revision}</span>
-                      <span className="font-mono bg-white px-2.5 py-1 rounded-lg border border-slate-200 text-orange-600 font-semibold">{subject.pyqs}</span>
+                      <span className="text-slate-500 font-medium hidden sm:inline">{subject.revisionStatus}</span>
+                      <span className="font-mono bg-white px-2.5 py-1 rounded-lg border border-slate-200 text-orange-600 font-semibold">
+                        {subject.solvedPyqs} / {subject.targetPyqs}
+                      </span>
                     </div>
                   </div>
                 ))}
@@ -160,8 +236,8 @@ export const ConsistencyLab: React.FC = () => {
             </div>
 
             <div className="pt-6 border-t border-slate-200 flex items-center justify-between text-xs text-slate-500 font-medium">
-              <span>Total Subjects: 10 / 10 Completed</span>
-              <span className="text-emerald-600 font-semibold">Status: Active Revision</span>
+              <span>Total Track Subjects: {gateCsSubjects.length} / 10 Managed</span>
+              <span className="text-emerald-600 font-semibold">Database Backed</span>
             </div>
           </div>
 
@@ -171,25 +247,34 @@ export const ConsistencyLab: React.FC = () => {
               <div className="flex items-center justify-between mb-6 pb-4 border-b border-slate-200">
                 <div>
                   <span className="text-xs font-semibold text-blue-600 uppercase tracking-wider">Examination Track 02</span>
-                  <h3 className="text-xl font-black text-slate-900">GATE DA — Syllabus Complete: 100%</h3>
+                  <h3 className="text-xl font-black text-slate-900">GATE DA — Track Progress</h3>
                 </div>
-                <div className="w-12 h-12 rounded-2xl bg-blue-50 border border-blue-200 text-blue-600 flex items-center justify-center font-bold text-sm">
-                  100%
+                <div className="w-12 h-12 rounded-2xl bg-blue-50 border border-blue-200 text-blue-600 flex items-center justify-center font-bold text-xs font-mono">
+                  {gateDaSubjects.length > 0
+                    ? `${Math.round(gateDaSubjects.reduce((acc, s) => acc + s.completionPercentage, 0) / gateDaSubjects.length)}%`
+                    : '100%'}
                 </div>
               </div>
 
               <div className="space-y-4 mb-8">
-                {gateDaSubjects.map((subject, idx) => (
-                  <div key={idx} className="bg-slate-50 p-4 rounded-2xl border border-slate-200/60 flex items-center justify-between gap-4">
+                {gateDaSubjects.map((subject) => (
+                  <div key={subject.id} className="bg-slate-50 p-4 rounded-2xl border border-slate-200/60 flex items-center justify-between gap-4">
                     <div className="flex items-center gap-3">
                       <div className="w-6 h-6 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0">
                         <CheckCircle2 className="w-4 h-4" />
                       </div>
-                      <span className="text-xs sm:text-sm font-bold text-slate-900">{subject.name}</span>
+                      <div>
+                        <span className="text-xs sm:text-sm font-bold text-slate-900 block">{subject.name}</span>
+                        <span className="text-[10px] text-slate-400 font-mono">
+                          Target: {subject.targetPyqs} · Remaining: {subject.remainingPyqs}
+                        </span>
+                      </div>
                     </div>
                     <div className="flex items-center gap-3 shrink-0 text-xs">
-                      <span className="text-slate-500 font-medium hidden sm:inline">{subject.revision}</span>
-                      <span className="font-mono bg-white px-2.5 py-1 rounded-lg border border-slate-200 text-blue-600 font-semibold">{subject.pyqs}</span>
+                      <span className="text-slate-500 font-medium hidden sm:inline">{subject.revisionStatus}</span>
+                      <span className="font-mono bg-white px-2.5 py-1 rounded-lg border border-slate-200 text-blue-600 font-semibold">
+                        {subject.solvedPyqs} / {subject.targetPyqs}
+                      </span>
                     </div>
                   </div>
                 ))}
@@ -197,8 +282,8 @@ export const ConsistencyLab: React.FC = () => {
             </div>
 
             <div className="pt-6 border-t border-slate-200 flex items-center justify-between text-xs text-slate-500 font-medium">
-              <span>Total Subjects: 7 / 7 Completed</span>
-              <span className="text-emerald-600 font-semibold">Status: Active Revision</span>
+              <span>Total Track Subjects: {gateDaSubjects.length} / 7 Managed</span>
+              <span className="text-emerald-600 font-semibold">Database Backed</span>
             </div>
           </div>
 

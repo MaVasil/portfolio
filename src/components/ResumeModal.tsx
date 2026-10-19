@@ -10,6 +10,20 @@ interface ResumeModalProps {
 export const ResumeModal: React.FC<ResumeModalProps> = ({ isOpen, onClose }) => {
   const [downloading, setDownloading] = useState(false);
   const [downloadSuccess, setDownloadSuccess] = useState(false);
+  const [resumeInfo, setResumeInfo] = useState<{ filename: string; fileSize: string; uploadedAt: string; publicUrl: string } | null>(null);
+
+  React.useEffect(() => {
+    if (isOpen) {
+      fetch('/api/resume/latest')
+        .then(res => res.json())
+        .then(data => {
+          if (data.success && data.document) {
+            setResumeInfo(data.document);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -23,68 +37,26 @@ export const ResumeModal: React.FC<ResumeModalProps> = ({ isOpen, onClose }) => 
       body: JSON.stringify({ event: 'resume_download' })
     }).catch(() => {});
 
-    // Generate real downloadable résumé file blob
-    setTimeout(() => {
-      const resumeContent = `
-MOHAMMED ABDUL VASIL (MD VASIL)
-Computer Science Engineering Student & Software Engineer
-Chaitanya Bharathi Institute of Technology (CBIT), Hyderabad
-Email: mdvasil07@gmail.com | Phone: +91-9502056930
-LinkedIn: linkedin.com/in/mohammed-abdul-vasil | GitHub: github.com/Ma Vasil
-
---------------------------------------------------------------------------------
-EDUCATION
---------------------------------------------------------------------------------
-- Chaitanya Bharathi Institute of Technology (CBIT), Hyderabad
-  B.E. Computer Science Engineering (Expected May 2028)
-  CGPA: 9.45 / 10.0 (GATE 2027 Full Merit Scholar - ACE Engineering Academy)
-- Diploma in Computer Engineering
-  CGPA: 9.91 / 10.0 | Class X: 97%
-
---------------------------------------------------------------------------------
-TECHNICAL SKILLS
---------------------------------------------------------------------------------
-- Languages & Core CS: Python, Java, C, C++, JavaScript, SQL, DSA, OOP, DBMS, OS, Distributed Systems, Microservices, RESTful APIs, System Design, Concurrency.
-- Web & Frontend: MERN Stack, React.js, FastAPI, HTML/CSS, Tailwind CSS.
-- AI, Tools & DevOps: Generative AI, Scikit-Learn, NumPy, Pandas, Git, GitHub, VS Code, Supabase, PostgreSQL, Linux, Prompt Engineering.
-
---------------------------------------------------------------------------------
-PROJECTS
---------------------------------------------------------------------------------
-1. TrainETA Dynamic Railway Intelligence (Smart India Hackathon - Top 20 of 200)
-   Tech: Python, FastAPI, Supabase, Scikit-Learn
-   ML-powered dynamic ETA prediction system fusing real-time telemetry with historical delay datasets.
-
-2. Smart Inventory Management & Storage System
-   Tech: React.js, Node.js, MongoDB, Express.js
-   Enterprise-grade inventory dashboard with real-time stock monitoring and secure RESTful APIs.
-
-3. VMEDHA Club Collaboration Portal
-   Tech: React.js, Tailwind CSS, Vite
-   Centralized portal for CBIT technical club activities and workshop registrations.
-
---------------------------------------------------------------------------------
-EXPERIENCE & LEADERSHIP
---------------------------------------------------------------------------------
-- CBIT Open Source Community (COSC) | Core Contributor (Jan 2026 – Aug 2026)
-- VMEDHA (CBIT Technical Club) | Executive Board Member (Sept 2025 – Aug 2026)
-- Design Tech Solutions | Industrial Training Intern (Nov 2024 – May 2025)
-      `;
-
-      const blob = new Blob([resumeContent], { type: 'text/plain;charset=utf-8' });
-      const url = URL.createObjectURL(blob);
+    // Initiate genuine PDF download from server / storage endpoint
+    try {
+      const downloadUrl = '/api/resume/download';
       const link = document.createElement('a');
-      link.href = url;
-      link.download = 'Mohammed_Abdul_Vasil_Resume.txt';
+      link.href = downloadUrl;
+      link.setAttribute('download', resumeInfo?.filename || 'Mohammed_Abdul_Vasil_Resume.pdf');
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      URL.revokeObjectURL(url);
 
       setDownloading(false);
       setDownloadSuccess(true);
       setTimeout(() => setDownloadSuccess(false), 4000);
-    }, 800);
+    } catch {
+      // Fallback to direct public URL if available
+      if (resumeInfo?.publicUrl) {
+        window.open(resumeInfo.publicUrl, '_blank');
+      }
+      setDownloading(false);
+    }
   };
 
   return (
@@ -106,23 +78,28 @@ EXPERIENCE & LEADERSHIP
           <div>
             <div className="text-xs font-semibold text-orange-600 uppercase tracking-wider mb-1">Curriculum Vitae</div>
             <h2 className="text-2xl font-bold text-slate-900">{portfolioData.personal.name}</h2>
+            {resumeInfo && (
+              <p className="text-[11px] text-slate-500 font-mono mt-0.5">
+                Active PDF: {resumeInfo.filename} ({resumeInfo.fileSize}) · Verified Storage
+              </p>
+            )}
           </div>
           <button
             onClick={handleDownload}
             disabled={downloading}
-            className="px-5 py-2.5 text-xs font-semibold text-white bg-orange-600 hover:bg-orange-700 rounded-xl shadow-md transition-all flex items-center justify-center gap-2"
+            className="px-5 py-2.5 text-xs font-semibold text-white bg-orange-600 hover:bg-orange-700 rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer"
           >
             {downloading ? (
-              <span>Generating Résumé File...</span>
+              <span>Downloading PDF...</span>
             ) : downloadSuccess ? (
               <>
                 <CheckCircle2 className="w-4 h-4 text-white" />
-                <span>Downloaded Successfully!</span>
+                <span>Downloaded PDF!</span>
               </>
             ) : (
               <>
                 <Download className="w-4 h-4" />
-                <span>Download Latest Résumé</span>
+                <span>Download Official Résumé PDF</span>
               </>
             )}
           </button>

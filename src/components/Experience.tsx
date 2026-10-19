@@ -1,27 +1,43 @@
 import React from 'react';
+import { motion } from 'framer-motion';
 import { portfolioData } from '../data/portfolioData';
 import { Briefcase, Calendar, MapPin, CheckCircle2 } from 'lucide-react';
+import { fadeUp, fadeLeft, staggerContainer, sectionHeader, VIEWPORT, cardHoverProps } from '../lib/motionVariants';
 
 export const Experience: React.FC = () => {
   return (
     <section id="experience" className="py-24 bg-slate-100/50 border-y border-slate-200/60">
       <div className="max-w-7xl mx-auto px-6">
-        
-        <div className="text-center max-w-2xl mx-auto mb-16">
+
+        <motion.div
+          variants={sectionHeader}
+          initial="hidden"
+          whileInView="visible"
+          viewport={VIEWPORT}
+          className="text-center max-w-2xl mx-auto mb-16"
+        >
           <div className="text-xs font-semibold text-orange-600 tracking-wider uppercase mb-2">Professional Timeline</div>
           <h2 className="text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight mb-4">
-            Experience & Leadership
+            Experience &amp; Leadership
           </h2>
           <p className="text-sm text-slate-600">
             Active leadership roles in technical communities and industrial software engineering experience.
           </p>
-        </div>
+        </motion.div>
 
-        <div className="max-w-4xl mx-auto space-y-6">
-          {portfolioData.experiences.map((exp) => (
-            <div
+        <motion.div
+          variants={staggerContainer}
+          initial="hidden"
+          whileInView="visible"
+          viewport={VIEWPORT}
+          className="max-w-4xl mx-auto space-y-6"
+        >
+          {portfolioData.experiences.map((exp, idx) => (
+            <motion.div
               key={exp.id}
-              className="glass-card rounded-2xl p-8 border border-slate-200/80 shadow-lg shadow-slate-200/40 relative overflow-hidden"
+              variants={idx % 2 === 0 ? fadeLeft : fadeUp}
+              {...cardHoverProps}
+              className="glass-card rounded-2xl p-8 border border-slate-200/80 shadow-lg shadow-slate-200/40 relative overflow-hidden cursor-default"
             >
               <div className="absolute top-0 left-0 w-2 h-full bg-orange-600" />
 
@@ -42,16 +58,21 @@ export const Experience: React.FC = () => {
                 </div>
               </div>
 
-              <p className="text-sm text-slate-600 leading-relaxed mb-6">
-                {exp.description}
-              </p>
+              <p className="text-sm text-slate-600 leading-relaxed mb-6">{exp.description}</p>
 
               <div className="space-y-2 mb-6">
                 {exp.highlights.map((highlight, hIdx) => (
-                  <div key={hIdx} className="flex items-start gap-2.5 text-xs text-slate-700">
+                  <motion.div
+                    key={hIdx}
+                    initial={{ opacity: 0, x: -12 }}
+                    whileInView={{ opacity: 1, x: 0 }}
+                    viewport={{ once: true }}
+                    transition={{ delay: hIdx * 0.06, duration: 0.35 }}
+                    className="flex items-start gap-2.5 text-xs text-slate-700"
+                  >
                     <CheckCircle2 className="w-4 h-4 text-orange-500 shrink-0 mt-0.5" />
                     <span>{highlight}</span>
-                  </div>
+                  </motion.div>
                 ))}
               </div>
 
@@ -62,9 +83,9 @@ export const Experience: React.FC = () => {
                   </span>
                 ))}
               </div>
-            </div>
+            </motion.div>
           ))}
-        </div>
+        </motion.div>
 
       </div>
     </section>
