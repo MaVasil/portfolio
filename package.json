@@ -33,14 +33,13 @@
     "react-markdown": "^10.1.0",
     "rehype-highlight": "^7.0.2",
     "remark-gfm": "^4.0.1",
+    "autoprefixer": "^10.4.21",
+    "esbuild": "^0.28.2",
+    "tailwindcss": "^4.3.3",
     "three": "^0.186.1",
     "tsx": "^4.21.0",
     "typescript": "^7.0.2",
     "vite": "^8.3.0"
   },
-  "devDependencies": {
-    "autoprefixer": "^10.4.21",
-    "esbuild": "^0.28.2",
-    "tailwindcss": "^4.3.3"
-  }
+  "devDependencies": {}
 }
