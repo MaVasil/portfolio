@@ -406,7 +406,7 @@ export const AiAssistant: React.FC = () => {
                     <h3 className="text-sm font-bold">Ask Vasil AI</h3>
                     <span className="flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 text-[9px] font-mono font-medium border border-emerald-500/30">
                       <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                      Gemini 3.8 Flash
+                      Gemini 3.5 Flash
                     </span>
                   </div>
                   <p className="text-[10px] text-slate-400 font-medium">Real-Time Portfolio Intelligence</p>

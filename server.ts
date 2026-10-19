@@ -109,7 +109,7 @@ You help recruiters, hiring managers, and curious visitors learn about Vasil's b
 - Do NOT invent projects, statistics, certifications, or skills not present in the profile data below.
 - If a specific fact is not in the profile data, say clearly: "I don't have that information in Vasil's profile."
 - Do NOT add marketing fluff like "Vasil is truly exceptional" or repeat information the user already provided.
-- Keep responses focused. If a question is out of scope, politely redirect to portfolio topics.
+- You can also answer general computer science, software engineering, algorithms, system design, and coding questions, demonstrating Vasil's deep technical domain knowledge.
 - Preserve technical accuracy. Do not simplify technical explanations to the point of inaccuracy.
 
 ## VERIFIED PROFILE DATA
@@ -873,11 +873,37 @@ app.get('/api/admin/contacts', requireAdminAuth, async (req, res) => {
 // TELEMETRY & AI ROUTES
 // ==========================================
 
+const CANDIDATE_GEMINI_MODELS = [
+  'gemini-3.5-flash',
+  'gemini-3.7-flash',
+  'gemini-flash-lite-latest',
+  'gemini-3.5-flash-lite',
+  'gemini-3.1-flash-lite',
+  'gemini-3.8-flash'
+];
+
+function generateIntelligentFallback(message: string): string {
+  const lower = message.toLowerCase();
+  if (lower.includes('gate') || lower.includes('consistency') || lower.includes('2027')) {
+    return 'Vasil is preparing for **GATE 2027** (Computer Science & Information Technology, and Data Science & AI tracks) as an **ACE Engineering Academy Full Merit Scholar**. He maintains disciplined daily problem solving with **140+ LeetCode** algorithmic problems completed, tracked in the Consistency Lab on this site.';
+  } else if (lower.includes('traineta') || lower.includes('sih') || lower.includes('hackathon') || lower.includes('railway')) {
+    return '**TrainETA** is Vasil\'s ML-powered dynamic railway ETA prediction system built with Python, FastAPI, Supabase, and Scikit-Learn. It achieved **Top 20 out of 200 teams** in the Smart India Hackathon (SIH 2024), predicting arrival delays with high accuracy.';
+  } else if (lower.includes('cgpa') || lower.includes('education') || lower.includes('college') || lower.includes('cbit') || lower.includes('degree')) {
+    return 'Mohammed Abdul Vasil is a B.E. Computer Science Engineering student at **Chaitanya Bharathi Institute of Technology (CBIT), Hyderabad** (Expected May 2028) with a **9.45 / 10.0 CGPA**, **9.91** Diploma CGPA, and **97%** in Class X.';
+  } else if (lower.includes('skill') || lower.includes('python') || lower.includes('react') || lower.includes('stack') || lower.includes('language') || lower.includes('tech')) {
+    return 'Vasil\'s technical stack includes **Python, Java, C/C++, JavaScript, TypeScript, React.js, FastAPI, Node.js, Express, Supabase, PostgreSQL**, and ML libraries (**Scikit-Learn, Pandas, NumPy**).';
+  } else if (lower.includes('project')) {
+    return 'Key projects by Vasil:\n- **TrainETA**: Dynamic Railway ETA Prediction (FastAPI, Scikit-Learn, SIH Top 20)\n- **Smart Inventory System**: Real-time stock management (MERN stack, JWT)\n- **VMEDHA Portal**: Educational event and participant portal (React.js, Tailwind)\n- **Automated Text Summarizer**: NLP document condensation (Python, FastAPI)';
+  } else {
+    return 'Mohammed Abdul Vasil is a Computer Science Engineering student at CBIT Hyderabad with a **9.45 CGPA**, strong foundation in Data Structures & Algorithms, full-stack development, and ML systems. Reach him at [mdvasil07@gmail.com](mailto:mdvasil07@gmail.com).';
+  }
+}
+
 app.get('/api/ai-chat/status', (req, res) => {
   const client = getGeminiClient();
   return res.json({
     active: !!client,
-    model: 'gemini-3.8-flash',
+    model: 'gemini-3.5-flash',
     provider: 'Google Gemini (GenAI SDK)',
     interactions: analyticsStore.aiInteractions
   });
@@ -899,104 +925,93 @@ app.post('/api/ai-chat', async (req, res) => {
     const aiClient = getGeminiClient();
 
     if (!aiClient) {
-      const lower = message.toLowerCase();
-      let reply = '';
-      if (lower.includes('cgpa') || lower.includes('education') || lower.includes('college')) {
-        reply = 'Mohammed Abdul Vasil is a Computer Science Engineering student at CBIT Hyderabad (Expected May 2028) with a **9.45 / 10.0 CGPA**, **9.91** Diploma CGPA, and **97%** in Class X.';
-      } else if (lower.includes('traineta') || lower.includes('sih') || lower.includes('hackathon')) {
-        reply = '**TrainETA** is an ML-powered dynamic railway ETA prediction system built with Python, FastAPI, Supabase, and Scikit-Learn. It achieved **Top 20 out of 200 teams** in the Smart India Hackathon.';
-      } else if (lower.includes('skill') || lower.includes('python') || lower.includes('react') || lower.includes('stack')) {
-        reply = 'Vasil is proficient in Python, Java, C/C++, JavaScript, React.js, FastAPI, Node.js, Supabase, PostgreSQL, and ML libraries (Scikit-Learn, Pandas, NumPy).';
-      } else if (lower.includes('gate') || lower.includes('consistency')) {
-        reply = 'Vasil is preparing for GATE 2027 (CSE & DA tracks) as an **ACE Engineering Academy Full Merit Scholar**, with 140+ LeetCode challenges solved.';
-      } else {
-        reply = 'Vasil is an enthusiastic software engineer and AI researcher. Reach him at [mdvasil07@gmail.com](mailto:mdvasil07@gmail.com) or +91-9502056930.';
-      }
-
+      const fallback = generateIntelligentFallback(message);
       if (isStream) {
         res.setHeader('Content-Type', 'text/event-stream');
         res.setHeader('Cache-Control', 'no-cache');
         res.setHeader('Connection', 'keep-alive');
-        res.write(`data: ${JSON.stringify({ text: reply })}\n\n`);
+        res.write(`data: ${JSON.stringify({ text: fallback })}\n\n`);
         res.write('data: [DONE]\n\n');
         return res.end();
       }
-      return res.json({ reply });
+      return res.json({ reply: fallback });
     }
 
-    // Build contents array: system prompt as first user turn, then conversation history, then current message
+    // Build contents array strictly from user conversation turns
     const safeHistory = Array.isArray(history) ? history.slice(-8) : [];
     const contents: Array<{ role: string; parts: Array<{ text: string }> }> = [
-      { role: 'user', parts: [{ text: portfolioKnowledgeBase + '\n\n---\nBegin answering questions from the user below.' }] },
-      { role: 'model', parts: [{ text: 'Understood. I am Ask Vasil AI, Mohammed Abdul Vasil\'s official portfolio assistant powered by Google Gemini. I will answer questions accurately, concisely, and follow the formatting guidelines.' }] },
       ...safeHistory
-        .filter((m: any) => m && typeof m.role === 'string' && typeof m.content === 'string')
+        .filter((m: any) => m && typeof m.role === 'string' && typeof m.content === 'string' && m.content.trim().length > 0)
         .map((m: any) => ({
           role: m.role === 'user' ? 'user' : 'model',
-          parts: [{ text: m.content }]
+          parts: [{ text: m.content.trim() }]
         })),
       { role: 'user', parts: [{ text: message.trim() }] }
     ];
 
     if (isStream) {
       res.setHeader('Content-Type', 'text/event-stream');
-      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Cache-Control', 'no-cache, no-transform');
       res.setHeader('Connection', 'keep-alive');
       res.flushHeaders?.();
 
-      try {
-        const stream = await aiClient.models.generateContentStream({
-          model: 'gemini-3.8-flash',
-          contents,
-        });
+      let streamStarted = false;
+      for (const model of CANDIDATE_GEMINI_MODELS) {
+        try {
+          const stream = await aiClient.models.generateContentStream({
+            model,
+            contents,
+            config: {
+              systemInstruction: portfolioKnowledgeBase
+            }
+          });
 
-        for await (const chunk of stream) {
-          const text = chunk.text || '';
-          if (text) {
-            res.write(`data: ${JSON.stringify({ text })}\n\n`);
+          for await (const chunk of stream) {
+            const text = chunk.text || '';
+            if (text) {
+              streamStarted = true;
+              res.write(`data: ${JSON.stringify({ text })}\n\n`);
+            }
+          }
+
+          res.write('data: [DONE]\n\n');
+          return res.end();
+        } catch (modelError: any) {
+          console.warn(`Streaming candidate ${model} failed (${modelError?.status || modelError?.message}), trying next model...`);
+          if (streamStarted) {
+            res.write('data: [DONE]\n\n');
+            return res.end();
           }
         }
-        res.write('data: [DONE]\n\n');
-        return res.end();
-      } catch (streamError: any) {
-        console.error('Gemini Stream Error:', streamError);
-        res.write(`data: ${JSON.stringify({ text: '\n\n*(Generation interrupted)*' })}\n\n`);
-        res.write('data: [DONE]\n\n');
-        return res.end();
       }
+
+      // If all models were unavailable, stream intelligent fallback
+      const fallback = generateIntelligentFallback(message);
+      res.write(`data: ${JSON.stringify({ text: fallback })}\n\n`);
+      res.write('data: [DONE]\n\n');
+      return res.end();
     }
 
     // Standard non-streaming JSON flow
-    let replyText: string;
-    try {
-      const response = await aiClient.models.generateContent({
-        model: 'gemini-3.8-flash',
-        contents,
-      });
-      replyText = response.text?.trim() || "I couldn't generate a response at the moment. Please try again.";
-    } catch (geminiError: any) {
-      console.error('Gemini API Error:', geminiError?.message || geminiError);
-
-      const lower = message.toLowerCase();
-      let fallbackReply = '';
-      if (lower.includes('gate') || lower.includes('consistency') || lower.includes('2027')) {
-        fallbackReply = 'Vasil is preparing for **GATE 2027** (Computer Science & Information Technology, and Data Science & AI tracks) as an **ACE Engineering Academy Full Merit Scholar**. He maintains disciplined daily problem solving with **140+ LeetCode** algorithmic problems completed, tracked in the Consistency Lab on this site.';
-      } else if (lower.includes('traineta') || lower.includes('sih') || lower.includes('hackathon') || lower.includes('railway')) {
-        fallbackReply = '**TrainETA** is Vasil\'s ML-powered dynamic railway ETA prediction system built with Python, FastAPI, Supabase, and Scikit-Learn. It achieved **Top 20 out of 200 teams** in the Smart India Hackathon (SIH 2024), predicting arrival delays with high accuracy.';
-      } else if (lower.includes('cgpa') || lower.includes('education') || lower.includes('college') || lower.includes('cbit') || lower.includes('degree')) {
-        fallbackReply = 'Mohammed Abdul Vasil is a B.E. Computer Science Engineering student at **Chaitanya Bharathi Institute of Technology (CBIT), Hyderabad** (Expected May 2028) with a **9.45 / 10.0 CGPA**, **9.91** Diploma CGPA, and **97%** in Class X.';
-      } else if (lower.includes('skill') || lower.includes('python') || lower.includes('react') || lower.includes('stack') || lower.includes('language') || lower.includes('tech')) {
-        fallbackReply = 'Vasil\'s technical stack includes **Python, Java, C/C++, JavaScript, TypeScript, React.js, FastAPI, Node.js, Express, Supabase, PostgreSQL**, and ML libraries (**Scikit-Learn, Pandas, NumPy**).';
-      } else if (lower.includes('project')) {
-        fallbackReply = 'Key projects by Vasil:\n- **TrainETA**: Dynamic Railway ETA Prediction (FastAPI, Scikit-Learn, SIH Top 20)\n- **Smart Inventory System**: Real-time stock management (MERN stack, JWT)\n- **VMEDHA Portal**: Educational event and participant portal (React.js, Tailwind)\n- **Automated Text Summarizer**: NLP document condensation (Python, FastAPI)';
-      } else {
-        fallbackReply = 'Mohammed Abdul Vasil is a Computer Science Engineering student at CBIT Hyderabad with a **9.45 CGPA**, strong foundation in Data Structures & Algorithms, full-stack development, and ML systems. Reach him at [mdvasil07@gmail.com](mailto:mdvasil07@gmail.com).';
+    for (const model of CANDIDATE_GEMINI_MODELS) {
+      try {
+        const response = await aiClient.models.generateContent({
+          model,
+          contents,
+          config: {
+            systemInstruction: portfolioKnowledgeBase
+          }
+        });
+        const replyText = response.text?.trim();
+        if (replyText) {
+          return res.json({ reply: replyText, model });
+        }
+      } catch (modelError: any) {
+        console.warn(`Non-streaming candidate ${model} failed, trying next...`);
       }
-
-      return res.json({ reply: fallbackReply });
     }
 
-    res.json({ reply: replyText });
+    return res.json({ reply: generateIntelligentFallback(message) });
   } catch (error: any) {
     console.error('AI Chat Error (outer):', error);
     res.status(500).json({ error: error.message || 'Failed to generate AI response' });
