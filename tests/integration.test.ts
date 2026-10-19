@@ -1,10 +1,32 @@
-import { test, describe, before } from 'node:test';
+import { test, describe, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import dotenv from 'dotenv';
 dotenv.config();
 
+import { app } from '../server.ts';
+
 const BASE_URL = 'http://localhost:3000';
 let adminToken = '';
+let serverInstance: any = null;
+
+before(async () => {
+  try {
+    await fetch(`${BASE_URL}/api/dsa/overall`);
+  } catch {
+    serverInstance = app.listen(3000);
+    await new Promise(resolve => setTimeout(resolve, 300));
+  }
+});
+
+after(() => {
+  if (serverInstance) {
+    serverInstance.closeAllConnections?.();
+    serverInstance.close(() => {
+      process.exit(0);
+    });
+    setTimeout(() => process.exit(0), 500).unref();
+  }
+});
 
 describe('Integration Tests: End-to-End API, Database & Storage', () => {
 

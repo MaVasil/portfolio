@@ -1,5 +1,4 @@
 import express, { Request, Response, NextFunction } from 'express';
-import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI } from '@google/genai';
 import { createClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
@@ -10,6 +9,21 @@ dotenv.config();
 
 const app = express();
 app.use(express.json({ limit: '15mb' }));
+
+// Normalize request URL for Vercel Serverless Function rewrites
+app.use((req, res, next) => {
+  const originalUrl = (
+    req.headers['x-matched-path'] ||
+    req.headers['x-vercel-matched-path'] ||
+    req.headers['x-vercel-original-url'] ||
+    req.headers['x-original-url']
+  ) as string | undefined;
+
+  if (originalUrl && (req.url === '/api' || req.url === '/api/' || !req.url.startsWith('/api'))) {
+    req.url = originalUrl;
+  }
+  next();
+});
 
 const PORT = process.env.PORT || 3000;
 
@@ -1040,6 +1054,7 @@ app.post('/api/analytics/track', (req, res) => {
 
 async function startServer() {
   if (process.env.NODE_ENV !== 'production') {
+    const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: 'spa',
