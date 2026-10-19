@@ -11,7 +11,7 @@ dotenv.config();
 const app = express();
 app.use(express.json({ limit: '15mb' }));
 
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 
 // Supabase administrative client for database persistence and storage
 const supabaseUrl = process.env.VITE_SUPABASE_URL || '';
@@ -61,15 +61,20 @@ function checkRateLimit(ip: string): boolean {
   return true;
 }
 
-// Initialize Google GenAI client if API key is present
-const ai = process.env.GEMINI_API_KEY ? new GoogleGenAI({
-  apiKey: process.env.GEMINI_API_KEY,
-  httpOptions: {
-    headers: {
-      'User-Agent': 'aistudio-build',
+// Google GenAI dynamic client resolver
+export function getGeminiClient(): GoogleGenAI | null {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) return null;
+  return new GoogleGenAI({
+    apiKey,
+    httpOptions: {
+      headers: {
+        'User-Agent': 'aistudio-build',
+      }
     }
-  }
-}) : null;
+  });
+}
+const ai = getGeminiClient();
 
 // Privacy-conscious analytics store
 const analyticsStore = {
@@ -868,9 +873,20 @@ app.get('/api/admin/contacts', requireAdminAuth, async (req, res) => {
 // TELEMETRY & AI ROUTES
 // ==========================================
 
+app.get('/api/ai-chat/status', (req, res) => {
+  const client = getGeminiClient();
+  return res.json({
+    active: !!client,
+    model: 'gemini-3.8-flash',
+    provider: 'Google Gemini (GenAI SDK)',
+    interactions: analyticsStore.aiInteractions
+  });
+});
+
 app.post('/api/ai-chat', async (req, res) => {
   try {
     const { message, history } = req.body;
+    const isStream = req.query.stream === 'true' || req.headers.accept === 'text/event-stream';
 
     if (!message || typeof message !== 'string' || message.trim().length === 0) {
       return res.status(400).json({ error: 'Message is required' });
@@ -880,21 +896,30 @@ app.post('/api/ai-chat', async (req, res) => {
     }
 
     analyticsStore.aiInteractions++;
+    const aiClient = getGeminiClient();
 
-    if (!ai) {
-      // Demo-mode keyword fallback when GEMINI_API_KEY is not set
+    if (!aiClient) {
       const lower = message.toLowerCase();
-      let reply = 'The AI assistant is in demo mode (GEMINI_API_KEY not configured). ';
+      let reply = '';
       if (lower.includes('cgpa') || lower.includes('education') || lower.includes('college')) {
-        reply += 'Mohammed Abdul Vasil is a Computer Science Engineering student at CBIT Hyderabad (Expected May 2028) with a **9.45 / 10.0 CGPA**, **9.91** Diploma CGPA, and **97%** in Class X.';
+        reply = 'Mohammed Abdul Vasil is a Computer Science Engineering student at CBIT Hyderabad (Expected May 2028) with a **9.45 / 10.0 CGPA**, **9.91** Diploma CGPA, and **97%** in Class X.';
       } else if (lower.includes('traineta') || lower.includes('sih') || lower.includes('hackathon')) {
-        reply += '**TrainETA** is an ML-powered dynamic railway ETA prediction system built with Python, FastAPI, Supabase, and Scikit-Learn. It achieved **Top 20 out of 200 teams** in the Smart India Hackathon.';
+        reply = '**TrainETA** is an ML-powered dynamic railway ETA prediction system built with Python, FastAPI, Supabase, and Scikit-Learn. It achieved **Top 20 out of 200 teams** in the Smart India Hackathon.';
       } else if (lower.includes('skill') || lower.includes('python') || lower.includes('react') || lower.includes('stack')) {
-        reply += 'Vasil is proficient in Python, Java, C/C++, JavaScript, React.js, FastAPI, Node.js, Supabase, PostgreSQL, and ML libraries (Scikit-Learn, Pandas, NumPy).';
+        reply = 'Vasil is proficient in Python, Java, C/C++, JavaScript, React.js, FastAPI, Node.js, Supabase, PostgreSQL, and ML libraries (Scikit-Learn, Pandas, NumPy).';
       } else if (lower.includes('gate') || lower.includes('consistency')) {
-        reply += 'Vasil is preparing for GATE 2027 (CSE & DA tracks) as an **ACE Engineering Academy Full Merit Scholar**, with 140+ LeetCode challenges solved.';
+        reply = 'Vasil is preparing for GATE 2027 (CSE & DA tracks) as an **ACE Engineering Academy Full Merit Scholar**, with 140+ LeetCode challenges solved.';
       } else {
-        reply += 'Vasil is a strong candidate for software engineering internships and full-stack/AI roles. Reach him at [mdvasil07@gmail.com](mailto:mdvasil07@gmail.com) or +91-9502056930.';
+        reply = 'Vasil is an enthusiastic software engineer and AI researcher. Reach him at [mdvasil07@gmail.com](mailto:mdvasil07@gmail.com) or +91-9502056930.';
+      }
+
+      if (isStream) {
+        res.setHeader('Content-Type', 'text/event-stream');
+        res.setHeader('Cache-Control', 'no-cache');
+        res.setHeader('Connection', 'keep-alive');
+        res.write(`data: ${JSON.stringify({ text: reply })}\n\n`);
+        res.write('data: [DONE]\n\n');
+        return res.end();
       }
       return res.json({ reply });
     }
@@ -903,7 +928,7 @@ app.post('/api/ai-chat', async (req, res) => {
     const safeHistory = Array.isArray(history) ? history.slice(-8) : [];
     const contents: Array<{ role: string; parts: Array<{ text: string }> }> = [
       { role: 'user', parts: [{ text: portfolioKnowledgeBase + '\n\n---\nBegin answering questions from the user below.' }] },
-      { role: 'model', parts: [{ text: 'Understood. I am Ask Vasil AI. I will answer questions about Mohammed Abdul Vasil\'s portfolio accurately, following the formatting rules provided.' }] },
+      { role: 'model', parts: [{ text: 'Understood. I am Ask Vasil AI, Mohammed Abdul Vasil\'s official portfolio assistant powered by Google Gemini. I will answer questions accurately, concisely, and follow the formatting guidelines.' }] },
       ...safeHistory
         .filter((m: any) => m && typeof m.role === 'string' && typeof m.content === 'string')
         .map((m: any) => ({
@@ -913,37 +938,47 @@ app.post('/api/ai-chat', async (req, res) => {
       { role: 'user', parts: [{ text: message.trim() }] }
     ];
 
-    let replyText: string;
-    try {
-      let response;
+    if (isStream) {
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
+      res.flushHeaders?.();
+
       try {
-        response = await ai.models.generateContent({
-          model: 'gemini-2.5-flash',
-          contents,
-        });
-      } catch {
-        response = await ai.models.generateContent({
+        const stream = await aiClient.models.generateContentStream({
           model: 'gemini-3.8-flash',
           contents,
         });
+
+        for await (const chunk of stream) {
+          const text = chunk.text || '';
+          if (text) {
+            res.write(`data: ${JSON.stringify({ text })}\n\n`);
+          }
+        }
+        res.write('data: [DONE]\n\n');
+        return res.end();
+      } catch (streamError: any) {
+        console.error('Gemini Stream Error:', streamError);
+        res.write(`data: ${JSON.stringify({ text: '\n\n*(Generation interrupted)*' })}\n\n`);
+        res.write('data: [DONE]\n\n');
+        return res.end();
       }
+    }
+
+    // Standard non-streaming JSON flow
+    let replyText: string;
+    try {
+      const response = await aiClient.models.generateContent({
+        model: 'gemini-3.8-flash',
+        contents,
+      });
       replyText = response.text?.trim() || "I couldn't generate a response at the moment. Please try again.";
     } catch (geminiError: any) {
-      // Parse the nested Gemini error to get the real message
-      let geminiMsg = geminiError?.message || '';
-      let parsedCode = 0;
-      try {
-        const inner = JSON.parse(geminiMsg);
-        geminiMsg = inner?.error?.message || geminiMsg;
-        parsedCode = inner?.error?.code || 0;
-      } catch { /* message was not JSON */ }
+      console.error('Gemini API Error:', geminiError?.message || geminiError);
 
-      console.error('Gemini API Error:', parsedCode || geminiError?.status, geminiMsg);
-
-      // Graceful keyword fallback so the visitor always gets an accurate, immediate answer
       const lower = message.toLowerCase();
       let fallbackReply = '';
-
       if (lower.includes('gate') || lower.includes('consistency') || lower.includes('2027')) {
         fallbackReply = 'Vasil is preparing for **GATE 2027** (Computer Science & Information Technology, and Data Science & AI tracks) as an **ACE Engineering Academy Full Merit Scholar**. He maintains disciplined daily problem solving with **140+ LeetCode** algorithmic problems completed, tracked in the Consistency Lab on this site.';
       } else if (lower.includes('traineta') || lower.includes('sih') || lower.includes('hackathon') || lower.includes('railway')) {
@@ -954,8 +989,6 @@ app.post('/api/ai-chat', async (req, res) => {
         fallbackReply = 'Vasil\'s technical stack includes **Python, Java, C/C++, JavaScript, TypeScript, React.js, FastAPI, Node.js, Express, Supabase, PostgreSQL**, and ML libraries (**Scikit-Learn, Pandas, NumPy**).';
       } else if (lower.includes('project')) {
         fallbackReply = 'Key projects by Vasil:\n- **TrainETA**: Dynamic Railway ETA Prediction (FastAPI, Scikit-Learn, SIH Top 20)\n- **Smart Inventory System**: Real-time stock management (MERN stack, JWT)\n- **VMEDHA Portal**: Educational event and participant portal (React.js, Tailwind)\n- **Automated Text Summarizer**: NLP document condensation (Python, FastAPI)';
-      } else if (lower.includes('contact') || lower.includes('email') || lower.includes('reach') || lower.includes('hire') || lower.includes('phone')) {
-        fallbackReply = 'You can reach Vasil directly at [mdvasil07@gmail.com](mailto:mdvasil07@gmail.com) or +91-9502056930. Connect on [LinkedIn](https://linkedin.com/in/mohammed-abdul-vasil) or check his [GitHub](https://github.com/mohammedabdulvasil).';
       } else {
         fallbackReply = 'Mohammed Abdul Vasil is a Computer Science Engineering student at CBIT Hyderabad with a **9.45 CGPA**, strong foundation in Data Structures & Algorithms, full-stack development, and ML systems. Reach him at [mdvasil07@gmail.com](mailto:mdvasil07@gmail.com).';
       }
@@ -998,16 +1031,20 @@ async function startServer() {
     });
     app.use(vite.middlewares);
   } else {
-    app.use(express.static(path.resolve(import.meta.dirname, 'dist')));
+    const distPath = path.resolve(import.meta.dirname, 'dist');
+    app.use(express.static(distPath));
+    app.get('*', (_req, res) => {
+      res.sendFile(path.resolve(distPath, 'index.html'));
+    });
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
+  app.listen(Number(PORT), '0.0.0.0', () => {
     console.log(`Vasil.dev server running on http://0.0.0.0:${PORT}`);
   });
 }
 
-// Only start the server when run directly (not during test imports)
-if (process.env.NODE_ENV !== 'test') {
+// Only start the server when run directly (not during test imports or Vercel serverless)
+if (process.env.NODE_ENV !== 'test' && !process.env.VERCEL) {
   startServer();
 }
 
