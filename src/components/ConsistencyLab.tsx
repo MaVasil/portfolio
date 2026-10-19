@@ -76,7 +76,7 @@ export const ConsistencyLab: React.FC = () => {
             GATE 2027 CSE & DA Preparation Dashboard
           </h2>
           <p className="text-sm text-slate-600">
-            Real-time, database-backed progress tracking for GATE 2027 examination tracks and overall algorithmic problem-solving rigor.
+            Real-time progress tracking for GATE 2027 examination tracks and overall algorithmic problem-solving rigor.
           </p>
         </motion.div>
 
@@ -94,12 +94,7 @@ export const ConsistencyLab: React.FC = () => {
                   <Code2 className="w-6 h-6" />
                 </div>
                 <div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-semibold text-orange-600 uppercase tracking-wider">Algorithmic Problem Solving</span>
-                    <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold px-2 py-0.5 rounded-full">
-                      Database Verified
-                    </span>
-                  </div>
+                  <span className="text-xs font-semibold text-orange-600 uppercase tracking-wider block">Algorithmic Problem Solving</span>
                   <h3 className="text-2xl font-black text-slate-900">Overall DSA Progress Tracker</h3>
                 </div>
               </div>
@@ -237,7 +232,7 @@ export const ConsistencyLab: React.FC = () => {
 
             <div className="pt-6 border-t border-slate-200 flex items-center justify-between text-xs text-slate-500 font-medium">
               <span>Total Track Subjects: {gateCsSubjects.length} / 10 Managed</span>
-              <span className="text-emerald-600 font-semibold">Database Backed</span>
+              <span className="text-emerald-600 font-semibold">Active Track</span>
             </div>
           </div>
 
@@ -283,7 +278,7 @@ export const ConsistencyLab: React.FC = () => {
 
             <div className="pt-6 border-t border-slate-200 flex items-center justify-between text-xs text-slate-500 font-medium">
               <span>Total Track Subjects: {gateDaSubjects.length} / 7 Managed</span>
-              <span className="text-emerald-600 font-semibold">Database Backed</span>
+              <span className="text-emerald-600 font-semibold">Active Track</span>
             </div>
           </div>
 

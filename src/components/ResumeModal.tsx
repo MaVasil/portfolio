@@ -80,7 +80,7 @@ export const ResumeModal: React.FC<ResumeModalProps> = ({ isOpen, onClose }) => 
             <h2 className="text-2xl font-bold text-slate-900">{portfolioData.personal.name}</h2>
             {resumeInfo && (
               <p className="text-[11px] text-slate-500 font-mono mt-0.5">
-                Active PDF: {resumeInfo.filename} ({resumeInfo.fileSize}) · Verified Storage
+                Active PDF: {resumeInfo.filename} ({resumeInfo.fileSize})
               </p>
             )}
           </div>
